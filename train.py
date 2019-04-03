@@ -111,7 +111,7 @@ def run(epoch):
         top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels[:,1])]))
         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,0])]))
         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,1])]))
-        val_loss.append(criterion(outputs, labels).to(device).item())
+        val_loss.append(sum(criterion(outputs, labels[:,i]).to(device) for i in range(2)).item())
 
     print('VAL:', epoch, mean(top1_val), mean(top5_val))
     acc_f.write(f'{epoch} : {mean(top1_acc)} : {mean(top5_acc)} : {mean(top1_val)} : {mean(top5_val)}\n')
