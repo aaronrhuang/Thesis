@@ -52,7 +52,44 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 losses_f = open('logs/losses.txt','a')
 acc_f = open('logs/acc.txt', 'a')
 
-def run(epoch):
+def train_normal(epoch):
+    running_loss = 0.0
+    top5_acc,top1_acc = [],[]
+    for batch_num, (inputs, labels) in enumerate(train_loader,1):
+        # print('Batch: ',inputs[0],labels)
+        model.train()
+        # inputs,labels = torch.stack(inputs).to(device), labels.to(device)
+        inputs,labels = torch.stack(inputs).to(device), labels.to(device)
+        # inputs,labels = torch.unsqueeze(inputs[0],0).to(device), labels.to(device)
+        optimizer.zero_grad()
+        outputs = model(inputs)
+
+        loss = criterion(outputs, labels).to(device)
+        # print (loss)
+        loss.backward()
+
+        optimizer.step()
+        running_loss += loss.item()
+
+        model.eval()
+        top5 = torch.topk(outputs,k=10)[1]
+        top1 = torch.topk(outputs,k=2)[1]
+        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        # print (top5_acc, top1_acc)
+
+        if batch_num % 50 == 0:
+            print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
+            losses_f.write(f'{epoch} : {batch_num} : {running_loss} : {mean(top1_acc)} : {mean(top5_acc)}\n')
+            running_loss = 0.0
+
+        gc.collect()
+        torch.cuda.empty_cache()
+    return top5_acc, top1_acc
+
+def train_mixed(epoch):
     running_loss = 0.0
     top5_acc,top1_acc = [],[]
     for batch_num, (inputs, labels) in enumerate(train_loader,1):
@@ -83,7 +120,7 @@ def run(epoch):
         top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels[:,0])]))
         top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels[:,1])]))
         top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,0])]))
-        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,0])]))
+        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,1])]))
         # print (top5_acc, top1_acc)
 
         if batch_num % 50 == 0:
@@ -93,7 +130,24 @@ def run(epoch):
 
         gc.collect()
         torch.cuda.empty_cache()
+    return top5_acc, top1_acc
 
+def val_normal(epoch):
+    top5_val, top1_val, val_loss = [],[],[]
+    model.eval()
+    for batch_num, (inputs, labels) in enumerate(val_loader):
+        inputs,labels = torch.stack(inputs).to(device), labels.to(device)
+        outputs = model(inputs)
+        top5 = torch.topk(outputs,k=10)[1]
+        top1 = torch.topk(outputs,k=2)[1]
+        top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        val_loss.append(sum(criterion(outputs, labels).to(device) for i in range(2)).item())
+    return top5_val, top1_val, val_loss
+
+def val_mixed(epoch):
     top5_val, top1_val, val_loss = [],[],[]
     model.eval()
     for batch_num, (inputs, labels) in enumerate(val_loader):
@@ -112,6 +166,11 @@ def run(epoch):
         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,0])]))
         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,1])]))
         val_loss.append(sum(criterion(outputs, labels[:,i]).to(device) for i in range(2)).item())
+    return top5_val, top1_val, val_loss
+
+def run(epoch):
+    top5_acc, top1_acc = train_mixed(epoch)
+    top5_val, top1_val, val_loss = val_mixed(epoch)
 
     print('VAL:', epoch, mean(top1_val), mean(top5_val))
     acc_f.write(f'{epoch} : {mean(top1_acc)} : {mean(top5_acc)} : {mean(top1_val)} : {mean(top5_val)}\n')
