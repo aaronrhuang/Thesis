@@ -3,6 +3,7 @@ import argparse
 import torch.optim as optim
 from torchvision import datasets, transforms
 from models.senet import *
+from torchvision.models import squeezenet1_1
 from statistics import mean
 import gc
 
@@ -43,7 +44,8 @@ val_loader = torch.utils.data.DataLoader(
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-model = se_resnet18(120).to(device)
+model = squeezenet1_1(pretrained=True)
+# model = se_resnet18(120).to(device)
 if checkpoint > 0:
     if mixed == 0:
         model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
@@ -67,6 +69,7 @@ def train_normal(epoch):
         inputs,labels = torch.stack(inputs).to(device), labels.to(device)
         # inputs,labels = torch.unsqueeze(inputs[0],0).to(device), labels.to(device)
         optimizer.zero_grad()
+        print (inputs.size())
         outputs = model(inputs)
 
         loss = criterion(outputs, labels).to(device)

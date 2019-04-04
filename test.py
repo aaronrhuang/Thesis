@@ -35,6 +35,13 @@ print (f_list)
 
 for batch_num, (inputs, labels) in enumerate(test_loader):
     model.eval()
+    mixed_input = []
+    mixed_label = []
+    for i in range (len(inputs)-1):
+        double = torch.stack(inputs[i:i+2])
+        mixed_input.append(torch.mean(double,0))
+        mixed_label.append(labels[i:i+2])
+
     outputs = torch.nn.functional.softmax(model(inputs),dim=1)
     # print (outputs)
     top = torch.topk(outputs,k=5)

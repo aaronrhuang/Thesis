@@ -1,7 +1,7 @@
 import math
 
 import torch.nn as nn
-from torchvision.models import ResNet
+from torchvision.models import ResNet, SqueezeNet
 from models.se_module import SELayer
 
 
@@ -25,6 +25,7 @@ class SEBasicBlock(nn.Module):
 
     def forward(self, x):
         residual = x
+        print (x.size())
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
@@ -81,7 +82,6 @@ class SEBottleneck(nn.Module):
         out = self.relu(out)
 
         return out
-
 
 def se_resnet18(num_classes):
     """Constructs a ResNet-18 model.
