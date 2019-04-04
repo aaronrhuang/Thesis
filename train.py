@@ -11,11 +11,13 @@ parser.add_argument('--epochs', type=int, default=10)
 parser.add_argument('--lr', type=float, default=0.1)
 parser.add_argument('--batch', type=int, default=100)
 parser.add_argument('--checkpoint', type=int, default=0)
+parser.add_argument('--mixed', type=int, default=0)
 params = parser.parse_args()
 
 num_epochs = params.epochs
 batch_size = params.batch
 checkpoint = params.checkpoint
+mixed = params.mixed
 
 def my_collate(batch):
     data = [item[0] for item in batch]
@@ -43,7 +45,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 model = se_resnet18(120).to(device)
 if checkpoint > 0:
-    model.load_state_dict(torch.load(f'checkpoint/model.{checkpoint}'))
+    if mixed == 0:
+        model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
+    else:
+        model.load_state_dict(torch.load(f'checkpoint/model.{checkpoint}'))
 
 criterion = nn.CrossEntropyLoss().to(device)
 optimizer = optim.SGD(model.parameters(), lr=params.lr, momentum=0.9, weight_decay = 5e-4)
@@ -169,7 +174,12 @@ def val_mixed(epoch):
     return top5_val, top1_val, val_loss
 
 def run(epoch):
-    top5_acc, top1_acc = train_mixed(epoch)
+    top5_acc,top1_acc = [],[]
+    if mixed > 0:
+        top5_acc, top1_acc = train_mixed(epoch)
+    else:
+        top5_acc, top1_acc = train_normal(epoch)
+
     top5_val, top1_val, val_loss = val_mixed(epoch)
 
     print('VAL:', epoch, mean(top1_val), mean(top5_val))
