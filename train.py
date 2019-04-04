@@ -107,7 +107,6 @@ def train_mixed(epoch):
         mixed_label = []
         for i in range (len(inputs)-1):
             double = torch.cat(inputs[i:i+2], 0)
-            print(double.size())
             mixed_input.append(double)
             mixed_label.append(labels[i:i+2])
         model.train()
