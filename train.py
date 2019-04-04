@@ -3,7 +3,7 @@ import argparse
 import torch.optim as optim
 from torchvision import datasets, transforms
 from models.senet import *
-from torchvision.models import squeezenet1_1
+from models.senet2 import *
 from statistics import mean
 import gc
 
@@ -44,8 +44,9 @@ val_loader = torch.utils.data.DataLoader(
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-model = squeezenet1_1(pretrained=True)
-# model = se_resnet18(120).to(device)
+# model = squeezenet1_1(pretrained=True)
+model = se_resnet18(120).to(device)
+# model = SENet18().to(device)
 if checkpoint > 0:
     if mixed == 0:
         model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
@@ -105,8 +106,9 @@ def train_mixed(epoch):
         mixed_input = []
         mixed_label = []
         for i in range (len(inputs)-1):
-            double = torch.stack(inputs[i:i+2])
-            mixed_input.append(torch.mean(double,0))
+            double = torch.cat(inputs[i:i+2], 0)
+            print(double.size())
+            mixed_input.append(double)
             mixed_label.append(labels[i:i+2])
         model.train()
         # inputs,labels = torch.stack(inputs).to(device), labels.to(device)
