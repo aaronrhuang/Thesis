@@ -4,6 +4,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from models.senet import *
 from models.senet2 import *
+import numpy as np
 from statistics import mean
 import gc
 
@@ -27,14 +28,34 @@ def my_collate(batch):
     target = torch.LongTensor(target)
     return [data, target]
 
+mixed_dict = {
+    0:[0,11],
+    1:[0,68],
+    2:[10,11],
+    3:[11,57],
+    4:[11,68],
+    5:[11,99],
+    6:[11,102],
+    7:[57,113,114,115]
+}
+
 train_root = 'train/'
 val_root = 'val/'
+
+mixed_train_root = 'mix_train/'
+mixed_val_root = 'mix_val/'
+
 base_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.5]*3, [0.5]*3)
     ])
+
 train_dataset = datasets.ImageFolder(root=train_root, transform=base_transform)
 val_dataset = datasets.ImageFolder(root=val_root, transform=base_transform)
+
+train_mixed = datasets.ImageFolder(root=mixed_train_root, transform=base_transform)
+val_mixed = datasets.ImageFolder(root=mixed_val_root, transform=base_transform)
+
 train_loader = torch.utils.data.DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True, collate_fn=my_collate
 )
@@ -42,18 +63,25 @@ val_loader = torch.utils.data.DataLoader(
     val_dataset, batch_size=batch_size, shuffle=True, collate_fn=my_collate
 )
 
+mixed_train_loader = torch.utils.data.DataLoader(
+    train_mixed, batch_size=batch_size, shuffle=True, collate_fn=my_collate
+)
+mixed_val_loader = torch.utils.data.DataLoader(
+    val_mixed, batch_size=batch_size, shuffle=True, collate_fn=my_collate
+)
+
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
-# model = squeezenet1_1(pretrained=True)
+
 model = se_resnet18(120).to(device)
-# model = SENet18().to(device)
 if checkpoint > 0:
     if mixed == 0:
         model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
     else:
         model.load_state_dict(torch.load(f'checkpoint/model.{checkpoint}'))
 
-criterion = nn.CrossEntropyLoss().to(device)
+criterion = nn.MultiLabelSoftMarginLoss().to(device)
 optimizer = optim.SGD(model.parameters(), lr=params.lr, momentum=0.9, weight_decay = 5e-4)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 
@@ -64,13 +92,14 @@ def train_normal(epoch):
     running_loss = 0.0
     top5_acc,top1_acc = [],[]
     for batch_num, (inputs, labels) in enumerate(train_loader,1):
-        # print('Batch: ',inputs[0],labels)
         model.train()
-        # inputs,labels = torch.stack(inputs).to(device), labels.to(device)
-        inputs,labels = torch.stack(inputs).to(device), labels.to(device)
-        # inputs,labels = torch.unsqueeze(inputs[0],0).to(device), labels.to(device)
+        multi_labels = []
+        for label in labels:
+            ml = [0]*120
+            ml[label] = 1
+            multi_labels.append(torch.FloatTensor(ml))
+        inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
-        print (inputs.size())
         outputs = model(inputs)
 
         loss = criterion(outputs, labels).to(device)
@@ -83,10 +112,14 @@ def train_normal(epoch):
         model.eval()
         top5 = torch.topk(outputs,k=10)[1]
         top1 = torch.topk(outputs,k=2)[1]
-        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+
+        for i,multi_label in enumerate(labels):
+            top5_acc.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
+
+        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
         # print (top5_acc, top1_acc)
 
         if batch_num % 50 == 0:
@@ -101,22 +134,19 @@ def train_normal(epoch):
 def train_mixed(epoch):
     running_loss = 0.0
     top5_acc,top1_acc = [],[]
-    for batch_num, (inputs, labels) in enumerate(train_loader,1):
-        # print('Batch: ',inputs[0],labels)
-        mixed_input = []
-        mixed_label = []
-        for i in range (len(inputs)-1):
-            double = torch.cat(inputs[i:i+2], 0)
-            mixed_input.append(double)
-            mixed_label.append(labels[i:i+2])
+    for batch_num, (inputs, labels) in enumerate(mixed_train_loader,1):
         model.train()
-        # inputs,labels = torch.stack(inputs).to(device), labels.to(device)
-        inputs,labels = torch.stack(mixed_input).to(device), torch.stack(mixed_label).to(device)
-        # inputs,labels = torch.unsqueeze(inputs[0],0).to(device), labels.to(device)
+        multi_labels = []
+        for label in labels:
+            ml = [0]*120
+            for idx in mixed_dict[label.item()]:
+                ml[idx] = 1
+            multi_labels.append(torch.FloatTensor(ml))
+        inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
         outputs = model(inputs)
 
-        loss = sum(criterion(outputs, labels[:,i]).to(device) for i in range(2))
+        loss = criterion(outputs, labels).to(device)
         # print (loss)
         loss.backward()
 
@@ -126,11 +156,15 @@ def train_mixed(epoch):
         model.eval()
         top5 = torch.topk(outputs,k=10)[1]
         top1 = torch.topk(outputs,k=2)[1]
-        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels[:,0])]))
-        top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels[:,1])]))
-        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,0])]))
-        top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels[:,1])]))
-        # print (top5_acc, top1_acc)
+
+        for i,multi_label in enumerate(labels):
+            top5_acc.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
+
+        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        print (mean(top5_acc))
 
         if batch_num % 50 == 0:
             print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
@@ -145,15 +179,23 @@ def val_normal(epoch):
     top5_val, top1_val, val_loss = [],[],[]
     model.eval()
     for batch_num, (inputs, labels) in enumerate(val_loader):
-        inputs,labels = torch.stack(inputs).to(device), labels.to(device)
+        multi_labels = []
+        for label in labels:
+            ml = [0]*120
+            ml[label] = 1
+            multi_labels.append(torch.FloatTensor(ml))
+        inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         outputs = model(inputs)
         top5 = torch.topk(outputs,k=10)[1]
         top1 = torch.topk(outputs,k=2)[1]
-        top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        val_loss.append(sum(criterion(outputs, labels).to(device) for i in range(2)).item())
+        # top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+        # top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        # top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+        print (outputs.size())
+        for i,multi_label in enumerate(labels):
+            top5_val.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
+        val_loss.append(criterion(outputs, labels).to(device).item())
     return top5_val, top1_val, val_loss
 
 def val_mixed(epoch):
@@ -163,8 +205,8 @@ def val_mixed(epoch):
         mixed_input = []
         mixed_label = []
         for i in range (len(inputs)-1):
-            double = torch.stack(inputs[i:i+2])
-            mixed_input.append(torch.mean(double,0))
+            double = torch.cat(inputs[i:i+2], 0)
+            mixed_input.append(double)
             mixed_label.append(labels[i:i+2])
         inputs,labels = torch.stack(mixed_input).to(device), torch.stack(mixed_label).to(device)
         outputs = model(inputs)
@@ -177,6 +219,25 @@ def val_mixed(epoch):
         val_loss.append(sum(criterion(outputs, labels[:,i]).to(device) for i in range(2)).item())
     return top5_val, top1_val, val_loss
 
+# def val_single(epoch):
+#     top5_val, top1_val, val_loss = [],[],[]
+#     model.eval()
+#     for batch_num, (inputs, labels) in enumerate(val_loader):
+#         mixed_input = []
+#         for i in range (len(inputs)):
+#             double = torch.cat(inputs[i]*2, 0)
+#             mixed_input.append(double)
+#         inputs,labels = torch.stack(mixed_input).to(device), labels.to(device)
+#         outputs = model(inputs)
+#         top5 = torch.topk(outputs,k=10)[1]
+#         top1 = torch.topk(outputs,k=2)[1]
+#         top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+#         top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
+#         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+#         top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
+#         val_loss.append(sum(criterion(outputs, labels[:,i]).to(device) for i in range(2)).item())
+#     return top5_val, top1_val, val_loss
+
 def run(epoch):
     top5_acc,top1_acc = [],[]
     if mixed > 0:
@@ -184,7 +245,7 @@ def run(epoch):
     else:
         top5_acc, top1_acc = train_normal(epoch)
 
-    top5_val, top1_val, val_loss = val_mixed(epoch)
+    top5_val, top1_val, val_loss = val_normal(epoch)
 
     print('VAL:', epoch, mean(top1_val), mean(top5_val))
     acc_f.write(f'{epoch} : {mean(top1_acc)} : {mean(top5_acc)} : {mean(top1_val)} : {mean(top5_val)}\n')
@@ -194,5 +255,5 @@ def run(epoch):
     gc.collect()
     torch.cuda.empty_cache()
 
-for epoch in range(checkpoint+1,checkpoint+num_epochs+2):
+for epoch in range(checkpoint+1,checkpoint+num_epochs+1):
     run(epoch)
