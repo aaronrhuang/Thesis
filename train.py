@@ -81,7 +81,7 @@ if checkpoint > 0:
     else:
         model.load_state_dict(torch.load(f'checkpoint/model.{checkpoint}'))
 
-criterion = nn.MultiLabelSoftMarginLoss().to(device)
+criterion = nn.MultiLabelMarginLoss().to(device)
 optimizer = optim.SGD(model.parameters(), lr=params.lr, momentum=0.9, weight_decay = 5e-4)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 
@@ -97,7 +97,7 @@ def train_normal(epoch):
         for label in labels:
             ml = [-1]*120
             ml[0] = label
-            multi_labels.append(torch.FloatTensor(ml))
+            multi_labels.append(torch.LongTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
         outputs = model(inputs)
@@ -116,7 +116,7 @@ def train_normal(epoch):
         top5_acc.append(mean([int(label[0].item() in top5[i]) for i,label in enumerate(labels)]))
         top1_acc.append(mean([int(label[0].item() in top1[i]) for i,label in enumerate(labels)]))
 
-
+        # print (running_loss, mean(top5_acc))
         if batch_num % 50 == 0:
             print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
             losses_f.write(f'{epoch} : {batch_num} : {running_loss} : {mean(top1_acc)} : {mean(top5_acc)}\n')
@@ -136,7 +136,7 @@ def train_mixed(epoch):
             ml = [-1]*120
             for i,idx in enumerate(mixed_dict[label.item()]):
                 ml[i] = idx
-            multi_labels.append(torch.FloatTensor(ml))
+            multi_labels.append(torch.LongTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
         outputs = model(inputs)
@@ -149,12 +149,12 @@ def train_mixed(epoch):
         running_loss += loss.item()
 
         model.eval()
-        top5 = torch.topk(outputs,k=10)[1]
+        top5 = torch.topk(outputs,k=5)[1]
         top1 = torch.topk(outputs,k=1)[1]
 
         top5_acc.append(mean([int(label[0].item() in top5[i] or label[1].item() in top5[i]) for i,label in enumerate(labels)]))
         top1_acc.append(mean([int(label[0].item() in top1[i] or label[1].item() in top1[i]) for i,label in enumerate(labels)]))
-
+        # print (running_loss, mean(top5_acc))
         if batch_num % 50 == 0:
             print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
             losses_f.write(f'{epoch} : {batch_num} : {running_loss} : {mean(top1_acc)} : {mean(top5_acc)}\n')
