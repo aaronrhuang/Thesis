@@ -95,8 +95,8 @@ def train_normal(epoch):
         model.train()
         multi_labels = []
         for label in labels:
-            ml = [0]*120
-            ml[label] = 1
+            ml = [-1]*120
+            ml[0] = label
             multi_labels.append(torch.FloatTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
@@ -110,17 +110,12 @@ def train_normal(epoch):
         running_loss += loss.item()
 
         model.eval()
-        top5 = torch.topk(outputs,k=10)[1]
-        top1 = torch.topk(outputs,k=2)[1]
+        top5 = torch.topk(outputs,k=5)[1]
+        top1 = torch.topk(outputs,k=1)[1]
 
-        for i,multi_label in enumerate(labels):
-            top5_acc.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
+        top5_acc.append(mean([int(label[0].item() in top5[i]) for i,label in enumerate(labels)]))
+        top1_acc.append(mean([int(label[0].item() in top1[i]) for i,label in enumerate(labels)]))
 
-        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        # print (top5_acc, top1_acc)
 
         if batch_num % 50 == 0:
             print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
@@ -138,9 +133,9 @@ def train_mixed(epoch):
         model.train()
         multi_labels = []
         for label in labels:
-            ml = [0]*120
-            for idx in mixed_dict[label.item()]:
-                ml[idx] = 1
+            ml = [-1]*120
+            for i,idx in enumerate(mixed_dict[label.item()]):
+                ml[i] = idx
             multi_labels.append(torch.FloatTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         optimizer.zero_grad()
@@ -155,16 +150,10 @@ def train_mixed(epoch):
 
         model.eval()
         top5 = torch.topk(outputs,k=10)[1]
-        top1 = torch.topk(outputs,k=2)[1]
+        top1 = torch.topk(outputs,k=1)[1]
 
-        for i,multi_label in enumerate(labels):
-            top5_acc.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
-
-        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top5_acc.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        # top1_acc.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        print (mean(top5_acc))
+        top5_acc.append(mean([int(label[0].item() in top5[i] or label[1].item() in top5[i]) for i,label in enumerate(labels)]))
+        top1_acc.append(mean([int(label[0].item() in top1[i] or label[1].item() in top1[i]) for i,label in enumerate(labels)]))
 
         if batch_num % 50 == 0:
             print (epoch, batch_num, running_loss, mean(top5_acc), mean(top1_acc))
@@ -181,20 +170,16 @@ def val_normal(epoch):
     for batch_num, (inputs, labels) in enumerate(val_loader):
         multi_labels = []
         for label in labels:
-            ml = [0]*120
-            ml[label] = 1
+            ml = [-1]*120
+            ml[0] = label
             multi_labels.append(torch.FloatTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         outputs = model(inputs)
         top5 = torch.topk(outputs,k=10)[1]
-        top1 = torch.topk(outputs,k=2)[1]
-        # top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top5_val.append(mean([int(label.item() in top5[i]) for i,label in enumerate(labels)]))
-        # top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        # top1_val.append(mean([int(label.item() in top1[i]) for i,label in enumerate(labels)]))
-        print (outputs.size())
-        for i,multi_label in enumerate(labels):
-            top5_val.append(mean([int(label.item() in top5[i]) for label in torch.nonzero(multi_label)]))
+        top1 = torch.topk(outputs,k=1)[1]
+
+        top5_val.append(mean([int(label[0].item() in top5[i]) for i,label in enumerate(labels)]))
+        top1_val.append(mean([int(label[0].item() in top1[i]) for i,label in enumerate(labels)]))
         val_loss.append(criterion(outputs, labels).to(device).item())
     return top5_val, top1_val, val_loss
 
