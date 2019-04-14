@@ -4,6 +4,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from models.senet import *
 from models.senet2 import *
+from models.inception_resnet import *
 import numpy as np
 from statistics import mean
 import gc
@@ -74,7 +75,8 @@ mixed_val_loader = torch.utils.data.DataLoader(
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
-model = se_resnet18(120).to(device)
+# model = se_resnet18(120).to(device)
+model = InceptionResV2().to(device)
 if checkpoint > 0:
     if mixed == 0:
         model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
@@ -172,7 +174,7 @@ def val_normal(epoch):
         for label in labels:
             ml = [-1]*120
             ml[0] = label
-            multi_labels.append(torch.FloatTensor(ml))
+            multi_labels.append(torch.LongTensor(ml))
         inputs,labels = torch.stack(inputs).to(device), torch.stack(multi_labels).to(device)
         outputs = model(inputs)
         top5 = torch.topk(outputs,k=10)[1]
