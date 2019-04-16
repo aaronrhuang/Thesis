@@ -24,7 +24,7 @@ def conv3x3(in_planes, out_planes, stride=1):
 
 class SEBasicBlock(nn.Module):
     '''
-    input 300*300*3
+    input 300*300*128
     output 35*35*128
     '''
     expansion = 1
@@ -104,22 +104,22 @@ class InceptionResA(nn.Module):
     output 35*35*384
     '''
 
-    def __init__(self, planes = 384, scale=1.0, reduction=16):
+    def __init__(self, planes = 96, scale=1.0, reduction=16):
         super(InceptionResA, self).__init__()
         self.relu = nn.ReLU(inplace=False)
         self.scale = scale
-        self.branch_0 = BasicConv2d(384, 32, kernel_size=1, stride=1)
+        self.branch_0 = BasicConv2d(planes, planes//12, kernel_size=1, stride=1)
         self.branch_1 = nn.Sequential(
-            BasicConv2d(384, 32, kernel_size=1, stride=1),
-            BasicConv2d(32, 32, kernel_size=3, stride=1, padding=1)
+            BasicConv2d(planes, planes//12, kernel_size=1, stride=1),
+            BasicConv2d(planes//12, planes//12, kernel_size=3, stride=1, padding=1)
         )
         self.branch_2 = nn.Sequential(
-            BasicConv2d(384, 32, kernel_size=1, stride=1),
-            BasicConv2d(32, 48, kernel_size=3, stride=1, padding=1),
-            BasicConv2d(48, 64, kernel_size=3, stride=1, padding=1)
+            BasicConv2d(planes, planes//12, kernel_size=1, stride=1),
+            BasicConv2d(planes//12, planes//8, kernel_size=3, stride=1, padding=1),
+            BasicConv2d(planes//8), planes//6, kernel_size=3, stride=1, padding=1)
         )
-        self.branch_all = BasicConv2d(128, 384, kernel_size=1, stride=1)
-        self.se = SELayer(384, reduction)
+        self.branch_all = BasicConv2d(planes//3, planes, kernel_size=1, stride=1)
+        self.se = SELayer(planes, reduction)
 
     def forward(self, x):
         x = self.relu(x)
@@ -135,17 +135,17 @@ class InceptionResA(nn.Module):
 
 class ReductionA(nn.Module):
     '''
-    input 35*35*384
-    output 17*17*1152
+    input 35*35*96
+    output 17*17*288
     '''
-    def __init__(self):
+    def __init__(self, planes=96):
         super(ReductionA, self).__init__()
         self.branch_0 = nn.MaxPool2d(3, stride=2)
         self.branch_1 = BasicConv2d(384, 384, kernel_size=3, stride=2)
         self.branch_2 = nn.Sequential(
-            BasicConv2d(384, 256, kernel_size=1, stride=1),
-            BasicConv2d(256, 256, kernel_size=3, stride=1, padding=1),
-            BasicConv2d(256, 384, kernel_size=3, stride=2)
+            BasicConv2d(planes, planes*2, kernel_size=1, stride=1),
+            BasicConv2d(planes*2, planes*2, kernel_size=3, stride=1, padding=1),
+            BasicConv2d(planes*2, planes*3, kernel_size=3, stride=2)
         )
 
     def forward(self, x):
@@ -157,21 +157,21 @@ class ReductionA(nn.Module):
 
 class InceptionResB(nn.Module):
     '''
-    input 17*17*1152
-    output 17*17*1152
+    input 17*17*288
+    output 17*17*288
     '''
-    def __init__(self, scale=1.0, reduction=16):
+    def __init__(self, planes=288, scale=1.0, reduction=16):
         super(InceptionResB, self).__init__()
         self.relu = nn.ReLU(inplace=False)
         self.scale = scale
-        self.branch_0 = BasicConv2d(1152, 192, kernel_size=1, stride=1)
+        self.branch_0 = BasicConv2d(planes, planes//6, kernel_size=1, stride=1)
         self.branch_1 = nn.Sequential(
-            BasicConv2d(1152, 128, kernel_size=1, stride=1),
-            BasicConv2d(128, 160, kernel_size=(1, 7), stride=1, padding=(0, 3)),
-            BasicConv2d(160, 192, kernel_size=(7, 1), stride=1, padding=(3, 0))
+            BasicConv2d(planes, planes//8, kernel_size=1, stride=1),
+            BasicConv2d(planes//8, planes//7, kernel_size=(1, 7), stride=1, padding=(0, 3)),
+            BasicConv2d(planes//7, planes//6, kernel_size=(7, 1), stride=1, padding=(3, 0))
         )
-        self.branch_all = BasicConv2d(384, 1152, kernel_size=1, stride=1)
-        self.se = SELayer(1152, reduction)
+        self.branch_all = BasicConv2d(planes//3, planes, kernel_size=1, stride=1)
+        self.se = SELayer(planes, reduction)
 
     def forward(self, x):
         x = self.relu(x)
@@ -186,24 +186,24 @@ class InceptionResB(nn.Module):
 
 class ReductionB(nn.Module):
     '''
-    input 17*17*1152
-    ouput 8*8*2144
+    input 17*17*288
+    ouput 8*8*576
     '''
     def __init__(self):
         super(ReductionB, self).__init__()
         self.branch_0 = nn.MaxPool2d(3, stride=2)
         self.branch_1 = nn.Sequential(
-            BasicConv2d(1152, 256, kernel_size=1, stride=1),
-            BasicConv2d(256, 384, kernel_size=3, stride=2)
+            BasicConv2d(planes, planes//8, kernel_size=1, stride=1),
+            BasicConv2d(planes//8, planes//6, kernel_size=3, stride=2)
         )
         self.branch_2 = nn.Sequential(
-            BasicConv2d(1152, 256, kernel_size=1, stride=1),
-            BasicConv2d(256, 288, kernel_size=3, stride=2)
+            BasicConv2d(planes, planes//8, kernel_size=1, stride=1),
+            BasicConv2d(planes//8, planes//6, kernel_size=3, stride=2)
         )
         self.branch_3 = nn.Sequential(
-            BasicConv2d(1152, 256, kernel_size=1, stride=1),
-            BasicConv2d(256, 288, kernel_size=3, stride=1, padding=1),
-            BasicConv2d(288, 320, kernel_size=3, stride=2)
+            BasicConv2d(planes, planes//8, kernel_size=1, stride=1),
+            BasicConv2d(planes//8, planes//7, kernel_size=3, stride=1, padding=1),
+            BasicConv2d(planes//7, planes//6, kernel_size=3, stride=2)
         )
 
     def forward(self, x):
@@ -216,21 +216,21 @@ class ReductionB(nn.Module):
 
 class InceptionResC(nn.Module):
     '''
-    input 8*8*2144
-    output 8*8*2144
+    input 8*8*576
+    output 8*8*576
     '''
-    def __init__(self, scale=1.0, reduction=16):
+    def __init__(self, planes=576, scale=1.0, reduction=16):
         super(InceptionResC, self).__init__()
         self.scale = scale
         self.relu = nn.ReLU(inplace=False)
-        self.branch_0 = BasicConv2d(2144, 192, kernel_size=1, stride=1)
+        self.branch_0 = BasicConv2d(planes, planes//8, kernel_size=1, stride=1)
         self.branch_1 = nn.Sequential(
-            BasicConv2d(2144, 192, kernel_size=1, stride=1),
-            BasicConv2d(192, 224, kernel_size=(1, 3), stride=1, padding=(0, 1)),
-            BasicConv2d(224, 256, kernel_size=(3, 1), stride=1, padding=(1, 0))
+            BasicConv2d(planes, planes//8, kernel_size=1, stride=1),
+            BasicConv2d(planes//8, planes//7, kernel_size=(1, 3), stride=1, padding=(0, 1)),
+            BasicConv2d(planes//7, planes//6, kernel_size=(3, 1), stride=1, padding=(1, 0))
         )
-        self.branch_all = BasicConv2d(448, 2144, kernel_size=1, stride=1)
-        self.se = SELayer(2144, reduction)
+        self.branch_all = BasicConv2d(planes//8+planes//6, planes, kernel_size=1, stride=1)
+        self.se = SELayer(planes, reduction)
 
     def forward(self, x):
         x = self.relu(x)
@@ -252,15 +252,15 @@ class InceptionResV2(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         downsample = nn.Sequential(
-            nn.Conv2d(64, 384,
+            nn.Conv2d(64, 96,
                       kernel_size=1, stride=stride, bias=False),
-            nn.BatchNorm2d(384),
+            nn.BatchNorm2d(96),
         )
         self.stem = nn.Sequential(self.conv1,
             self.bn1,
             self.relu,
             self.maxpool,
-            SEBasicBlock(64,384,downsample=downsample)
+            SEBasicBlock(64,96,downsample=downsample)
         )
         resA,resB,resC = [],[],[]
         for i in range(layers[0]):
