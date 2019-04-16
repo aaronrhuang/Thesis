@@ -251,7 +251,17 @@ class InceptionResV2(nn.Module):
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.stem = nn.Sequential(self.conv1, self.bn1, self.relu, self.maxpool, SEBasicBlock(64,384))
+        downsample = nn.Sequential(
+            nn.Conv2d(64, 384,
+                      kernel_size=1, stride=stride, bias=False),
+            nn.BatchNorm2d(384),
+        )
+        self.stem = nn.Sequential(self.conv1,
+            self.bn1,
+            self.relu,
+            self.maxpool,
+            SEBasicBlock(64,384,downsample=downsample)
+        )
         resA,resB,resC = [],[],[]
         for i in range(layers[0]):
             resA.append(InceptionResA())
@@ -265,7 +275,7 @@ class InceptionResV2(nn.Module):
         self.inception_resB10 = nn.Sequential(*resB)
         self.reductionB = ReductionB()
         self.inception_resC5 = nn.Sequential(*resC)
-        
+
         self.avg_pool = nn.AvgPool2d(8, count_include_pad=False)
         self.dropout = nn.Dropout2d(p=0.8)
         self.fc = nn.Linear(2144, num_classes)
