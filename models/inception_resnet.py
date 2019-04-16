@@ -18,6 +18,44 @@ class BasicConv2d(nn.Module):
         x = self.relu(x)
         return x
 
+def conv3x3(in_planes, out_planes, stride=1):
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False)
+
+
+class SEBasicBlock(nn.Module):
+    '''
+    input 300*300*3
+    output 35*35*128
+    '''
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None, reduction=16):
+        super(SEBasicBlock, self).__init__()
+        self.conv1 = conv3x3(inplanes, planes, stride)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = conv3x3(planes, planes, 1)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.se = SELayer(planes, reduction)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.se(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+        return out
 
 class StemBlock(nn.Module):
     '''
@@ -66,7 +104,7 @@ class InceptionResA(nn.Module):
     output 35*35*384
     '''
 
-    def __init__(self, scale=1.0, reduction=16):
+    def __init__(self, planes = 384, scale=1.0, reduction=16):
         super(InceptionResA, self).__init__()
         self.relu = nn.ReLU(inplace=False)
         self.scale = scale
@@ -207,37 +245,27 @@ class InceptionResC(nn.Module):
 
 class InceptionResV2(nn.Module):
 
-    def __init__(self, num_classes=120):
+    def __init__(self, num_classes=120, layers = [2,2,2]):
         super(InceptionResV2, self).__init__()
-        self.stem = StemBlock()
-        self.inception_resA5 = nn.Sequential(
-            InceptionResA(),
-            InceptionResA(),
-            InceptionResA(),
-            InceptionResA(),
-            InceptionResA()
-        )
+        self.conv1 = nn.Conv2d(3,64,kernel_size=7, stride=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.stem = nn.Sequential(self.conv1, self.bn1, self.relu, self.maxpool, SEBasicBlock(64,384))
+        resA,resB,resC = [],[],[]
+        for i in range(layers[0]):
+            resA.append(InceptionResA())
+        for i in range(layers[1]):
+            resB.append(InceptionResB())
+        for i in range(layers[2]):
+            resC.append(InceptionResC())
+
+        self.inception_resA5 = nn.Sequential(*resA)
         self.reductionA = ReductionA()
-        self.inception_resB10 = nn.Sequential(
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB(),
-            InceptionResB()
-        )
+        self.inception_resB10 = nn.Sequential(*resB)
         self.reductionB = ReductionB()
-        self.inception_resC5 = nn.Sequential(
-            InceptionResC(),
-            InceptionResC(),
-            InceptionResC(),
-            InceptionResC(),
-            InceptionResC()
-        )
+        self.inception_resC5 = nn.Sequential(*resC)
+        
         self.avg_pool = nn.AvgPool2d(8, count_include_pad=False)
         self.dropout = nn.Dropout2d(p=0.8)
         self.fc = nn.Linear(2144, num_classes)
