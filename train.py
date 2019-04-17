@@ -5,6 +5,7 @@ from torchvision import datasets, transforms
 from models.senet import *
 from models.senet2 import *
 from models.inception_resnet import *
+from models.resnet import *
 import numpy as np
 from statistics import mean
 import gc
@@ -76,7 +77,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
 
 # model = se_resnet18(120).to(device)
-model = InceptionResV2().to(device)
+# model = InceptionResV2().to(device)
+model = ResNet18(120)
 if checkpoint > 0:
     if mixed == 0:
         model.load_state_dict(torch.load(f'checkpoint_std/model.{checkpoint}'))
